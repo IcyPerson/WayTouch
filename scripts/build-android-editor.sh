@@ -84,8 +84,13 @@ echo "[1/5] Compiling Android editor (Kotlin)"
   -classpath "$ANDROID_JAR:$WORK/classes" -include-runtime -d "$WORK/waytouch-editor.jar"
 
 echo "[2/5] Converting editor to DEX"
+# R.class is only resolved at compile time today because kotlinc inlines the
+# static final resource ids. Package it anyway: any future runtime reference
+# to R (or an R8 pass that stops inlining) would otherwise crash with
+# NoClassDefFoundError on launch.
+jar cf "$WORK/editor-resources.jar" -C "$WORK/classes" .
 java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" \
-  --output "$WORK/dex" "$WORK/waytouch-editor.jar" >"$WORK/d8.log" 2>&1
+  --output "$WORK/dex" "$WORK/waytouch-editor.jar" "$WORK/editor-resources.jar" >"$WORK/d8.log" 2>&1
 
 echo "[3/5] Packaging Android manifest"
 "$BUILD_TOOLS/aapt" package -f -M "$ROOT/android-editor/src/main/AndroidManifest.xml" \

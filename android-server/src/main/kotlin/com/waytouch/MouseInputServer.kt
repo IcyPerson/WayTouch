@@ -123,7 +123,12 @@ internal object MouseInputServer {
                     return
                 }
                 ownsController = true
-                client.soTimeout = 0
+                // The Rust host sends a WTM3 position-query heartbeat roughly
+                // every 3 s while the stream is idle. A read timeout turns a
+                // wedged or half-open controller into a clean teardown plus
+                // CANCEL instead of holding the exclusive slot until TCP
+                // keepalive defaults (~2 h) eventually fire.
+                client.soTimeout = 10_000
                 output.write("OK CONTROL\n".toByteArray(Charsets.US_ASCII))
                 output.flush()
                 line = readBoundedLine(input, MAX_LINE_LENGTH) ?: return
