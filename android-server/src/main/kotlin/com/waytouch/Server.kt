@@ -43,6 +43,16 @@ internal object TouchInjector {
     private var lastDisplayRefreshUptime = 0L
     private const val DISPLAY_REFRESH_INTERVAL_MS = 500L
 
+    // InputDevice.getDeviceIds() allocates a fresh array per call and each
+    // InputDevice.getDevice() is a binder transaction on API <= 30. Both
+    // pointer streams serialize behind this object's monitor, so scanning on
+    // every injected event puts binder work on the 240 Hz hot path; the cache
+    // refreshes on a slow throttle and still follows device hotplug.
+    private var lastDeviceIdScanUptime = 0L
+    private var cachedTouchscreenDeviceId = 0
+    private var cachedMouseDeviceId = 0
+    private const val DEVICE_ID_REFRESH_INTERVAL_MS = 500L
+
     // MotionEvent.obtain copies pointer data into its native event. Reuse these
     // fixed arrays to avoid allocating PointerProperties/PointerCoords arrays per frame.
     private val touchProperties = Array(WTCH_MAX_POINTERS) { MotionEvent.PointerProperties() }
@@ -185,10 +195,23 @@ internal object TouchInjector {
         if (!cleared) println("WTCH_STARTUP_TOUCH_RECOVERY no_stale_touch_stream=true")
     }
 
-    private fun inputDeviceId(source: Int): Int {
-        return InputDevice.getDeviceIds().firstOrNull { id ->
+    private fun findDeviceId(source: Int): Int =
+        InputDevice.getDeviceIds().firstOrNull { id ->
             InputDevice.getDevice(id)?.supportsSource(source) == true
         } ?: 0
+
+    private fun inputDeviceId(source: Int): Int {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastDeviceIdScanUptime >= DEVICE_ID_REFRESH_INTERVAL_MS) {
+            lastDeviceIdScanUptime = now
+            cachedTouchscreenDeviceId = findDeviceId(InputDevice.SOURCE_TOUCHSCREEN)
+            cachedMouseDeviceId = findDeviceId(InputDevice.SOURCE_MOUSE)
+        }
+        return if (source == InputDevice.SOURCE_TOUCHSCREEN) {
+            cachedTouchscreenDeviceId
+        } else {
+            cachedMouseDeviceId
+        }
     }
 
     private fun prepareMotionEvent(event: MotionEvent, source: Int) {
@@ -303,8 +326,16 @@ internal object TouchInjector {
             y = mouseY
             pressure = if (buttons == 0) 0f else 1f
             size = 1f
-            setAxisValue(MotionEvent.AXIS_HSCROLL, horizontalScroll)
-            setAxisValue(MotionEvent.AXIS_VSCROLL, verticalScroll)
+            if (action == MotionEvent.ACTION_SCROLL) {
+                setAxisValue(MotionEvent.AXIS_HSCROLL, horizontalScroll)
+                setAxisValue(MotionEvent.AXIS_VSCROLL, verticalScroll)
+            } else {
+                // MotionEvent.obtain copies every axis of this reused coord;
+                // stale scroll deltas must not bleed into later hover and
+                // button events.
+                setAxisValue(MotionEvent.AXIS_HSCROLL, 0f)
+                setAxisValue(MotionEvent.AXIS_VSCROLL, 0f)
+            }
         }
 
         val event = MotionEvent.obtain(
@@ -423,8 +454,10 @@ object WayTouchServer {
         }
     }
 
+    private val ACK_MAGIC_BYTES = byteArrayOf(0x57, 0x54, 0x4f, 0x4b)
+
     private fun writeAck(output: DataOutputStream, sequence: Long) {
-        output.write(byteArrayOf(0x57, 0x54, 0x4f, 0x4b))
+        output.write(ACK_MAGIC_BYTES)
         output.writeInt(Integer.reverseBytes(sequence.toInt()))
         output.flush()
     }

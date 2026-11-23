@@ -76,10 +76,11 @@ java -cp "$R8_JAR" com.android.tools.r8.D8 --min-api 28 --lib "$ANDROID_JAR" \
 
 echo "[6/7] Checking Qt 6 / Material interface"
 "$PYTHON_BIN" -c 'import PySide6; print(PySide6.__version__)'
-"$PYTHON_BIN" -m py_compile "$ROOT/gui/waytouch.py" "$ROOT/gui/test_qml.py" "$ROOT/gui/test_backend_live.py" "$ROOT/gui/test_backend_conflict.py" "$ROOT/scripts/test-input-pipeline.py" "$ROOT/scripts/test-android-bootstrap.py" "$ROOT/scripts/test-touchdrag-stress.py"
+"$PYTHON_BIN" -m py_compile "$ROOT/gui/waytouch.py" "$ROOT/gui/test_qml.py" "$ROOT/gui/test_backend_live.py" "$ROOT/gui/test_backend_conflict.py" "$ROOT/gui/test_controller_state.py" "$ROOT/scripts/test-input-pipeline.py" "$ROOT/scripts/test-android-bootstrap.py" "$ROOT/scripts/test-touchdrag-stress.py"
 "$PYTHON_BIN" "$ROOT/scripts/test-android-bootstrap.py"
 QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" "$ROOT/gui/test_qml.py"
 QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" "$ROOT/gui/test_backend_conflict.py"
+QT_QPA_PLATFORM=offscreen "$PYTHON_BIN" "$ROOT/gui/test_controller_state.py"
 bash -n "$ROOT/scripts/start-server.sh" "$ROOT/scripts/waytouch-gui" "$ROOT/scripts/install-desktop.sh" "$ROOT/scripts/build-android-editor.sh" "$ROOT/scripts/install-android-editor.sh" "$ROOT/scripts/install-kotlin.sh" "$ROOT/scripts/setup-dev.sh" "$ROOT/scripts/doctor.sh"
 
 echo "[7/7] Building the Android notification layout editor APK"
